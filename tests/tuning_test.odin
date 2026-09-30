@@ -237,3 +237,59 @@ package lu_brain__tests
         _, err = lu.link_level_to_label(&s_wave, f.rec, 99, 0)
         testing.expect_value(t, err, lu.Error(lu.API_Error.Invalid_Argument))
     }
+
+///////////////////////////////////////////////////////////////////////////////
+// Save limit
+
+    @(test)
+    save_max_level__test :: proc(t: ^testing.T) {
+        cells_full: int
+        {
+            f: Fixture
+            fixture__init(t, &f, lu.CONFIGS[.Default], 3, 5, 1)
+            defer fixture__terminate(t, &f)
+
+            s_wave: lu.Save_Wave
+            defer testing.expect(t, lu.save_wave_terminate(&s_wave) == nil)
+            save_all_digits(t, &f, &s_wave)
+            cells_full = lu.get_net_stats(&f.brain).cells_count
+        }
+
+        config := lu.CONFIGS[.Default]
+        config.s_save_max_level = 1
+
+        f: Fixture
+        fixture__init(t, &f, config, 3, 5, 1)
+        defer fixture__terminate(t, &f)
+
+        s_wave: lu.Save_Wave
+        testing.expect(t, lu.save_wave_init(&s_wave, &f.brain) == nil)
+        defer testing.expect(t, lu.save_wave_terminate(&s_wave) == nil)
+
+        for &digit, i in DIGITS_3X5 {
+            testing.expect(t, lu.push(&s_wave, f.rec, BLANK_3X5[:], 3, 5, 1) == nil)
+            testing.expect(t, lu.push(&s_wave, f.rec, digit[:], 3, 5, 1) == nil)
+            testing.expect(t, lu.save(&s_wave) == nil)
+
+            // the seq top was never built
+            _, err := lu.link_to_label(&s_wave, SEQ_AREA_IX, 0, 0, 0, DIGIT_LABELS[i])
+            testing.expect_value(t, err, lu.Error(lu.API_Error.W_Cell_Not_Found))
+
+            _, err = lu.link_level_to_label(&s_wave, f.rec, 1, DIGIT_LABELS[i])
+            testing.expect(t, err == nil)
+        }
+
+        cells := lu.get_net_stats(&f.brain).cells_count
+        testing.expect(t, cells > 0)
+        testing.expect(t, cells < cells_full)
+
+        // matching still works at level 1
+        m_wave: lu.Match_Wave
+        testing.expect(t, lu.match_wave_init(&m_wave, &f.brain) == nil)
+        defer testing.expect(t, lu.match_wave_terminate(&m_wave) == nil)
+        testing.expect_value(t, top_label(match_pattern(t, &m_wave, f.rec, BLANK_3X5[:], DIGITS_3X5[3][:], 3, 5)), 3)
+
+        config.s_save_max_level = -1
+        brain: lu.Brain
+        testing.expect_value(t, lu.brain_init(&brain, config), lu.Error(lu.API_Error.Invalid_Config))
+    }

@@ -14,13 +14,37 @@ This is an Odin port of an experimental C project I created years ago. The code 
 
 Accuracy on the Semeion handwritten digits (1,593 digits, 16×16), 10-fold cross-validation:
 
-| Mode | Accuracy | Train (1,493 digits, 1 thread) | Match |
-|---|---|---|---|
-| Original C algorithm | ~74.5% | 0.6 s | ~70 ms / digit |
-| Tuned (`CONFIGS[.Semeion_Tuned]`) | **~96.2%** | 0.8 s | ~16 ms / digit |
+| Mode | Accuracy | Train (1,493 digits, 1 thread) | Net size | Match |
+|---|---|---|---|---|
+| Original C algorithm | ~74.5% | 0.6 s | ~1 M cells | ~70 ms / digit |
+| Tuned (`CONFIGS[.Semeion_Tuned]`) | **~96.2%** | 0.2 s | ~8 k cells | ~16 ms / digit |
 
-Results are averaged over 4 random fold splits (range 95.9–96.3%). For reference, k-nearest-neighbour
-on raw pixels gets about 90% on this dataset.
+The CV results are averaged over 4 random fold splits (range 95.9–96.3%).
+
+#### Honest comparison
+
+The settings were chosen by watching CV scores on the same data, so they were also checked on a
+clean holdout. Each method was tuned by CV on half A only, trained on A (800 digits), and tested
+once on the untouched half B (793 digits):
+
+| Method | Holdout accuracy | Match |
+|---|---|---|
+| Original C algorithm | 69.4% | 25 ms / digit |
+| k-nearest-neighbour, raw pixels | 90.0% | 0.2 ms / digit |
+| **Tuned Lu_Brain** | **95.3%** | 8.8 ms / digit |
+| k-nearest-neighbour, same blur and ±1 px shift | **95.7%** | 0.7 ms / digit |
+
+What this shows:
+
+- The tuned mode is an **example-based patch classifier**. Computing the same patch score directly,
+  without the memory graph, gives exactly the same predictions (`-mode:Patch` in the harness).
+  The graph works as a shared index of patch patterns. It does not add accuracy.
+- **kNN with the same preprocessing is as accurate and about 12× faster.** On this benchmark
+  Lu_Brain's accuracy comes from the preprocessing and the patch voting, not from the memory
+  structure itself.
+- Lu_Brain's case has to rest on what the memory structure offers beyond accuracy: inspectable
+  and editable memories, shared patterns, and deleting specific knowledge. None of this is
+  benchmarked yet.
 
 - ‼️It learns in one pass. Each digit is learned instantly and incrementally, with no retraining.
 - ‼️No gradient descent.
@@ -34,22 +58,28 @@ options (their defaults reproduce the C version exactly):
 - **Patch voting instead of one top cell.** Every training sample gets its own label, linked to all
   cells of rec level 1 (`link_level_to_label`). Each of those cells is a 2×2 patch pattern.
   With `Label_Scoring.Sum` a sample scores the sum of its matching patches over the whole image,
-  and the class is voted over the top 5 samples. The original C approach links one label per class
+  and the class is voted over the 5 best (sample, offset) scores. The original C approach links one label per class
   to the single top cell. Because every layer averages 2×2 children, that top cell mostly "sees"
   the center of the image.
 - **Grayscale with fuzzy values.** Images are blurred (3×3 box) into grayscale, quantized into
   3 value steps, and neighbouring steps also match with a partial signal (`p_fuzzy_radius = 1`).
 - **Shift tolerance.** The test digit is matched at every ±1 px offset (`set_dest_start_pos`), and
-  the best sample scores win.
+  the best sample scores win. A sample that matches well at several offsets can take several of the
+  5 voting places; counting each sample only once scores slightly lower (~95.8%).
 - **Faster matching.** `w_match_max_level = 1` stops propagation above the level the labels live on.
   Results are identical, and matching is about 85× faster.
+- **Smaller net.** `s_save_max_level = 1` builds only the layers that are used. Results are
+  identical, the net shrinks from ~1 M to ~8 k cells, and training is ~4× faster.
 
 `samples/semeion_eval` is the evaluation harness. Every option is a command-line flag, for example:
 
 ```sh
 cd samples/semeion_eval && odin build . -o:speed -out:out/eval.exe
 out/eval.exe                                            # original C algorithm
-out/eval.exe -per-sample -no-seq-link -scoring:Sum -stop -link-level:1 -match-shift:1 -fuzzy:1 -blur:1 -steps:3 -results:5
+out/eval.exe -per-sample -no-seq-link -scoring:Sum -stop -stop-save -link-level:1 -match-shift:1 -fuzzy:1 -blur:1 -steps:3 -results:5
+out/eval.exe -mode:Knn -blur:1 -match-shift:1 -results:3          # kNN baseline, same preprocessing
+out/eval.exe -mode:Patch -match-shift:1 -fuzzy:1 -blur:1 -steps:3 -results:5   # patch score without the graph
+out/eval.exe -holdout:Tune ...   /   -holdout:Test ...          # tune on half A, test once on half B
 ```
 
 ## Why Lu_Brain?

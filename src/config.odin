@@ -26,6 +26,7 @@ package lu_brain
         // breakpoint * default_sig, otherwise a new cell is created. Lower = more sharing.
         s_vp_parent_breakpoint: Value,          // (0, 1], C: 0.76, parents of VP cells
         s_parent_breakpoint: Value,             // (0, 1], C: 0.8, parents of N cells
+        s_save_max_level: int,                  // save builds rec layers up to this level only, 0 = all (C)
 
         //
         // Network
@@ -135,6 +136,7 @@ package lu_brain
             s_column_h = 16,
             s_vp_parent_breakpoint = 0.76,
             s_parent_breakpoint = 0.8,
+            s_save_max_level = 1,
             n_link_mem_size = 16,
             w_save_waves_size = 1,
             w_match_waves_size = 1,
@@ -157,6 +159,7 @@ package lu_brain
         if self.s_column_h <= 1 do return API_Error.Invalid_Config
         if self.s_vp_parent_breakpoint <= 0 || self.s_vp_parent_breakpoint > 1 do return API_Error.Invalid_Config
         if self.s_parent_breakpoint <= 0 || self.s_parent_breakpoint > 1 do return API_Error.Invalid_Config
+        if self.s_save_max_level < 0 do return API_Error.Invalid_Config
         if self.n_link_mem_size <= 1 do return API_Error.Invalid_Config
         if self.w_save_waves_size <= 0 || self.w_save_waves_size > N_CELL__W_SAVE_CELLS_SIZE do return API_Error.Invalid_Config
         if self.w_match_waves_size <= 0 || self.w_match_waves_size > N_CELL__W_MATCH_CELLS_SIZE do return API_Error.Invalid_Config

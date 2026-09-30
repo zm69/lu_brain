@@ -4,6 +4,7 @@
 # Allow the README.md file 
 !/README.md
 !docs/*.md
+!evaluations/*.md
 
 
 # Build outputs

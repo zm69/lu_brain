@@ -21,6 +21,7 @@ package semeion_eval
     import "core:flags"
     import "core:fmt"
     import "core:math/rand"
+    import "core:mem"
     import "core:os"
     import "core:slice"
     import "core:strconv"
@@ -57,6 +58,7 @@ package semeion_eval
         blur: int                   `usage:"Box blur radius applied to every image (0 = none)."`,
         shift: int                  `usage:"Also train shifted copies within +-shift pixels."`,
         match_shift: int            `usage:"Match at every offset within +-match-shift pixels, keep the best scores."`,
+        dedup: bool                 `usage:"Count each training sample once in the top results (best offset)."`,
         link_layers: int            `usage:"Also link labels to every cell of the top N rec layers."`,
         link_frame: bool            `usage:"Also link labels to the frame layers."`,
         link_skip: int              `usage:"Skip the top M rec layers before linking link-layers."`,
@@ -66,8 +68,27 @@ package semeion_eval
         per_sample: bool            `usage:"Label = training sample id; the class is voted over the top results."`,
         retry: bool                 `usage:"Retry with lower breakpoints when a match returns nothing."`,
 
+        mode: Mode                  `usage:"Brain (Lu_Brain), Knn (pixel k-nearest-neighbour) or Patch (patch score without the graph)."`,
+        holdout: Holdout            `usage:"None: CV on all digits. Tune: CV on half A only. Test: train on A, test once on half B."`,
+        stop_save: bool             `usage:"Build the net only up to link-level on save (s_save_max_level)."`,
+
         verbose: bool               `usage:"Print per-fold results."`,
     }
+
+    Mode :: enum {
+        Brain,
+        Knn,
+        Patch,
+    }
+
+    Holdout :: enum {
+        None,
+        Tune,
+        Test,
+    }
+
+    // Seed of the A/B holdout split; fixed so that B stays untouched while tuning.
+    HOLDOUT_SEED :: 1000
 
     options__default :: proc() -> Options {
         return Options{
@@ -178,6 +199,7 @@ package semeion_eval
         train_sec: f64,
         match_sec: f64,
         cells: int,
+        peak_mb: f64,
         err: lu.Error,
     }
 
@@ -190,7 +212,11 @@ package semeion_eval
     }
 
     fold__run :: proc(eval: ^Eval, fold: int) -> (r: Fold_Result) {
-        r.err = fold__run_internal(eval, fold, &r)
+        switch eval.opts.mode {
+            case .Brain: r.err = fold__run_internal(eval, fold, &r)
+            case .Knn: fold__run_knn(eval, fold, &r)
+            case .Patch: fold__run_patch(eval, fold, &r)
+        }
         return
     }
 
@@ -213,14 +239,21 @@ package semeion_eval
         config.w_match_label_scoring = opts.scoring
         config.w_match_results_size = opts.results
         if opts.stop do config.w_match_max_level = opts.link_level
+        if opts.stop_save do config.s_save_max_level = opts.link_level
 
         rec_config := lu.REC_CONFIGS[.Mono1_Image]
         rec_config.comp_config.p_neu_size = opts.steps
         rec_config.comp_config.p_fuzzy_radius = opts.fuzzy
         rec_config.comp_config.p_null_damping = opts.null_damping
 
+        // peak memory of the brain and its waves
+        tracking: mem.Tracking_Allocator
+        mem.tracking_allocator_init(&tracking, context.allocator)
+        defer mem.tracking_allocator_destroy(&tracking)
+        defer r.peak_mb = f64(tracking.peak_memory_allocated) / (1024 * 1024)
+
         brain: lu.Brain
-        lu.brain_init(&brain, config) or_return
+        lu.brain_init(&brain, config, mem.tracking_allocator(&tracking)) or_return
         defer lu.brain_terminate(&brain)
 
         rec := lu.add_rec(&brain, DIGIT__W, DIGIT__H, 1, rec_config) or_return
@@ -244,7 +277,7 @@ package semeion_eval
         start := time.tick_now()
 
         for &d, i in eval.digits {
-            if eval.fold_of[i] == fold do continue
+            if eval.fold_of[i] == fold || eval.fold_of[i] < 0 do continue
 
             copy_ix := 0
             for dy in -opts.shift..=opts.shift {
@@ -340,7 +373,8 @@ package semeion_eval
             }
             lu.set_dest_start_pos(rec, 0, 0)
 
-            slice.sort_by(combined[:], proc(a, b: lu.Label) -> bool { return a.sig > b.sig })
+            slice.stable_sort_by(combined[:], proc(a, b: lu.Label) -> bool { return a.sig > b.sig })
+            if opts.dedup do dedup_results(&combined)
             results := combined[:min(len(combined), opts.results)]
 
             if len(results) == 0 {
@@ -361,35 +395,46 @@ package semeion_eval
         return nil
     }
 
-    // Rank (0 = best) of the true class among the classes of the results, by summed score.
-    // Without per_sample, result ids are classes already.
+    // Rank (0 = best) of the true class in a deterministic class ranking: classes by summed score,
+    // ties broken by which class appears first in the results. rank == 0 means "predicted".
+    // Without per_sample, result ids are classes already and the library ranking is used.
     class_rank :: proc(eval: ^Eval, results: []lu.Label, name: int) -> int {
-        scores: [DIGIT__VALUE_COUNT]lu.Value
-        seen: [DIGIT__VALUE_COUNT]bool
-        first := -1
+        copies := (2 * eval.opts.shift + 1) * (2 * eval.opts.shift + 1)
 
-        for res, k in results {
-            copies := (2 * eval.opts.shift + 1) * (2 * eval.opts.shift + 1)
-            class := eval.opts.per_sample ? eval.digits[res.id / copies].name : res.id
-            if !eval.opts.per_sample {
-                // keep the library ranking
-                if class == name do return k
-                continue
-            }
-            if first < 0 do first = class
-            scores[class] += res.sig
-            seen[class] = true
+        if !eval.opts.per_sample {
+            for res, k in results do if res.id == name do return k
+            return max(int)
         }
 
-        if !eval.opts.per_sample do return max(int)
-        if !seen[name] do return max(int)
+        scores: [DIGIT__VALUE_COUNT]lu.Value
+        first_seen: [DIGIT__VALUE_COUNT]int
+        for &f in first_seen do f = max(int)
+
+        for res, k in results {
+            class := eval.digits[res.id / copies].name
+            scores[class] += res.sig
+            if first_seen[class] == max(int) do first_seen[class] = k
+        }
+
+        if first_seen[name] == max(int) do return max(int)
 
         rank := 0
         for c in 0..<DIGIT__VALUE_COUNT {
-            if c == name || !seen[c] do continue
-            if scores[c] > scores[name] || (scores[c] == scores[name] && c == first) do rank += 1
+            if c == name || first_seen[c] == max(int) do continue
+            if scores[c] > scores[name] || (scores[c] == scores[name] && first_seen[c] < first_seen[name]) do rank += 1
         }
         return rank
+    }
+
+    // Keeps the best entry per label id (results are sorted best first).
+    dedup_results :: proc(results: ^[dynamic]lu.Label) {
+        n := 0
+        outer: for r in results {
+            for kept in results[:n] do if kept.id == r.id do continue outer
+            results[n] = r
+            n += 1
+        }
+        resize(results, n)
     }
 
     match_digit :: proc(match_wave: ^lu.Match_Wave, rec: ^lu.Rec, d: ^Digit) -> (results: []lu.Label, err: lu.Error) {
@@ -435,6 +480,33 @@ package semeion_eval
         fold_of := folds__make(digits[:], opts.folds, opts.seed)
         defer delete(fold_of)
 
+        if opts.holdout != .None {
+            // stratified A / B halves, always the same split
+            in_b := folds__make(digits[:], 2, HOLDOUT_SEED)
+            defer delete(in_b)
+
+            switch opts.holdout {
+                case .None:
+                case .Tune:
+                    // CV inside A only; B is never trained on or tested
+                    a_digits := make([dynamic]Digit)
+                    defer delete(a_digits)
+                    a_ixs := make([dynamic]int)
+                    defer delete(a_ixs)
+                    for d, i in digits do if in_b[i] == 0 { append(&a_digits, d); append(&a_ixs, i) }
+
+                    a_folds := folds__make(a_digits[:], opts.folds, opts.seed)
+                    defer delete(a_folds)
+
+                    for &f in fold_of do f = -1
+                    for ix, k in a_ixs do fold_of[ix] = a_folds[k]
+                case .Test:
+                    // one "fold": test on B (fold 0), train on A
+                    opts.folds = 1
+                    for &f, i in fold_of do f = in_b[i] == 1 ? 0 : 1
+            }
+        }
+
         eval := Eval{
             opts = opts,
             digits = digits[:],
@@ -464,19 +536,20 @@ package semeion_eval
             total.train_sec += r.train_sec
             total.match_sec += r.match_sec
             total.cells += r.cells
+            total.peak_mb = max(total.peak_mb, r.peak_mb)
         }
 
         fmt.printfln(
-            "accuracy %.2f%% (%d/%d), top3 %.2f%%, no result %d, avg cells %v, train %.2fs/fold, match %.2fms/digit, wall %.1fs | %v",
-            f64(total.correct) * 100 / f64(total.tested), total.correct, total.tested, f64(total.top3) * 100 / f64(total.tested), total.no_result,
-            total.cells / opts.folds, total.train_sec / f64(opts.folds), total.match_sec * 1000 / f64(total.tested),
+            "%v: accuracy %.2f%% (%d/%d), top3 %.2f%%, no result %d, avg cells %v, peak %.0f MB/fold, train %.2fs/fold, match %.2fms/digit, wall %.1fs | %v",
+            opts.mode, f64(total.correct) * 100 / f64(total.tested), total.correct, total.tested, f64(total.top3) * 100 / f64(total.tested), total.no_result,
+            total.cells / opts.folds, total.peak_mb, total.train_sec / f64(opts.folds), total.match_sec * 1000 / f64(total.tested),
             time.duration_seconds(time.tick_since(start)), options__summary(&opts),
         )
     }
 
     options__summary :: proc(o: ^Options) -> string {
         return fmt.tprintf(
-            "bp=%v vp_bp=%v n_bp=%v scoring=%v results=%v steps=%v fuzzy=%v null_damping=%v blur=%v shift=%v match_shift=%v link_layers=%v link_skip=%v link_level=%v stop=%v link_frame=%v no_seq_link=%v per_sample=%v retry=%v",
-            o.bp, o.vp_bp, o.n_bp, o.scoring, o.results, o.steps, o.fuzzy, o.null_damping, o.blur, o.shift, o.match_shift, o.link_layers, o.link_skip, o.link_level, o.stop, o.link_frame, o.no_seq_link, o.per_sample, o.retry,
+            "holdout=%v stop_save=%v bp=%v vp_bp=%v n_bp=%v scoring=%v results=%v steps=%v fuzzy=%v null_damping=%v blur=%v shift=%v match_shift=%v link_layers=%v link_skip=%v link_level=%v stop=%v link_frame=%v no_seq_link=%v per_sample=%v retry=%v",
+            o.holdout, o.stop_save, o.bp, o.vp_bp, o.n_bp, o.scoring, o.results, o.steps, o.fuzzy, o.null_damping, o.blur, o.shift, o.match_shift, o.link_layers, o.link_skip, o.link_level, o.stop, o.link_frame, o.no_seq_link, o.per_sample, o.retry,
         )
     }

@@ -44,7 +44,12 @@ package lu_brain
         if !w_table__any_fired(curr_w_table, data.block_id) do return nil, nil
 
         parent := s_layer__as_n(layer_rec.p)
+        save_max_level := layer_rec.s_table.config.s_save_max_level
+
         for parent.tag != .Frame {
+            // not C: stop building the net above this level (the frame and seq areas are skipped)
+            if save_max_level > 0 && parent.level > save_max_level do return nil, nil
+
             when DEEP_DEBUG {
                 fmt.printf("\nPROCESSING ")
                 s_layer_base__print_basic_info(&parent.base)
