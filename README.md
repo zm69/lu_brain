@@ -23,6 +23,7 @@ Results are averaged over 4 random fold splits (range 95.9–96.3%). For referen
 on raw pixels gets about 90% on this dataset.
 
 - ‼️It learns in one pass. Each digit is learned instantly and incrementally, with no retraining.
+- ‼️No gradient descent.
 - ‼️It doesn't use hardware acceleration yet.
 
 ### How the tuned mode works
