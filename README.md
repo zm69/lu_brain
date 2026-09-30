@@ -1,21 +1,22 @@
+![Lu_Brain banner](/img/banner.png?raw=true)
 # 🧠 Lu_Brain
 
 Ludyna Brain (Lu_Brain) is a human-like memory database, written in [Odin](https://odin-lang.org).
 
-This is an Odin port of the original experimental C project created by me years ago. The code around the algorithm was rewritten in modern Odin:
+This is an Odin port of an experimental C project I created years ago. The code around the algorithm was rewritten in modern Odin:
 
 - explicit allocators instead of a global `Lu_Mem`,
 - typed slices, dynamic arrays and a small index pool instead of `void*` containers,
 - tagged unions instead of virtual destructors,
 - `Error` unions with `or_return` instead of exceptions.
 
-### 🚧 ___This project is an EXPERIMENTAL, for fun, work in progress.___ 🚧
+### 🚧 ___This project is an EXPERIMENTAL, just-for-fun work in progress.___ 🚧
 
-Current accuracy is weak: **70–79%** (difference is mostly noise from the random split.)
+Current accuracy on the Semeion digits sample is weak: **70–79%** (the spread is mostly noise from the random test split).
 
 But:
-- It learns in one pass‼️Each digit is learned instantly and incrementally (about 0.55 s for 1,493 digits), and nothing has been tuned yet.
-- No hardware acceleration yet.
+- It learns in one pass‼️ Each digit is learned instantly and incrementally (about 0.55 s for 1,493 digits), and nothing has been tuned yet.
+- It doesn't use hardware acceleration yet.
 
 ## Why Lu_Brain?
 
@@ -86,8 +87,8 @@ cd src/lu_core && odin test .                            # core containers
 cd samples/semeion && odin run . -o:speed -out:out/semeion.exe
 ```
 
-`samples/semeion` trains on about 1500 handwritten digits and recognizes 100 held-out ones.
+`samples/semeion` trains on about 1,500 handwritten digits and recognizes 100 held-out ones.
 
 ## Legal
 
-___The library is free to use by everyone with good intentions (zLib license).___
+___The library is free to use by everyone with good intentions (zlib license).___
