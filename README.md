@@ -15,8 +15,9 @@ This is an Odin port of an experimental C project I created years ago. The code 
 Current accuracy on the Semeion digits sample is weak: **70–79%** (the spread is mostly noise from the random test split).
 
 But:
-- It learns in one pass‼️ Each digit is learned instantly and incrementally (about 0.55 s for 1,493 digits), and nothing has been tuned yet.
-- It doesn't use hardware acceleration yet.
+- ‼️It learns in one pass. Each digit is learned instantly and incrementally (about 0.55 s for 1,493 digits).
+- ‼️Nothing has been tuned yet.
+- ‼️It doesn't use hardware acceleration yet.
 
 ## Why Lu_Brain?
 
