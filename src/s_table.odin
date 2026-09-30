@@ -12,10 +12,6 @@ package lu_brain
 ///////////////////////////////////////////////////////////////////////////////
 // Defines
 
-    // Breakpoints used on save to decide if an existing parent matches well enough.
-    S_COLUMN__VP_PARENT_BREAKPOINT :: 0.76
-    S_COLUMN__PARENT_BREAKPOINT :: 0.8
-
     S_COLUMN__CELLS_MAX :: 1 << N_CELL_IX__BITS
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -260,7 +256,7 @@ package lu_brain
 
         for child in children do s_column__find_matching_parent_vp(self, child, block_id, wave_ix, &save_cell, &cell_ix)
 
-        if save_cell == nil || !w_save_cell__is_sig_over_breakpoint(save_cell, &self.cells[cell_ix], S_COLUMN__VP_PARENT_BREAKPOINT) {
+        if save_cell == nil || !w_save_cell__is_sig_over_breakpoint(save_cell, &self.cells[cell_ix], self.s_table.config.s_vp_parent_breakpoint) {
             cell_ix = s_column__alloc_n_cell(self) or_return
             n_cell__vp_save(&self.cells[cell_ix], &self.link_mem, children) or_return
         }
@@ -314,7 +310,7 @@ package lu_brain
 
         for &child in children do s_column__find_matching_parent(self, &child, block_id, wave_ix, &save_cell, &cell_ix)
 
-        if save_cell == nil || !w_save_cell__is_sig_over_breakpoint(save_cell, &self.cells[cell_ix], S_COLUMN__PARENT_BREAKPOINT) {
+        if save_cell == nil || !w_save_cell__is_sig_over_breakpoint(save_cell, &self.cells[cell_ix], self.s_table.config.s_parent_breakpoint) {
             cell_ix = s_column__alloc_n_cell(self) or_return
             n_cell__save(&self.cells[cell_ix], &self.link_mem, children) or_return
         }
@@ -339,6 +335,7 @@ package lu_brain
 
     S_Table :: struct {
         allocator: runtime.Allocator,
+        config: ^Config,
         layer: ^S_Layer_Base,
 
         w: int,
@@ -359,6 +356,7 @@ package lu_brain
         when VALIDATIONS do assert(w > 0 && h > 0 && h_max >= h)
 
         self.allocator = allocator
+        self.config = config
         self.layer = layer
         self.w = w
         self.h = h

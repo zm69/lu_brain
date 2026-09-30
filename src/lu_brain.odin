@@ -126,6 +126,7 @@ package lu_brain
     save :: save_wave__save
     save_step :: save_wave__save_step
     link_to_label :: save_wave__link_to_label
+    link_level_to_label :: save_wave__link_level_to_label
 
     //
     // Match
@@ -135,6 +136,7 @@ package lu_brain
     match_step :: match_wave__match_step
     match_results :: match_wave__results
     fired_cells_count :: match_wave__fired_cells_count
+    set_match_sig_breakpoint :: match_wave__set_sig_breakpoint
     print_results :: match_wave__print_results
 
     //

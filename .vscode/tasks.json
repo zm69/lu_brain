@@ -209,6 +209,63 @@
                 "clear": true,
                 "close": false
             }
+        },
+        {
+            "label": "Semeion Baseline",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "run",
+                "${workspaceFolder}/samples/semeion",
+                "-o:speed",
+                "-out:out/semeion.exe",
+                "-define:SMN_BASELINE=true"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/samples/semeion/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
+        },
+        {
+            "label": "Semeion Eval",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "run",
+                "${workspaceFolder}/samples/semeion_eval",
+                "-o:speed",
+                "-out:out/eval.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/samples/semeion_eval/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
         }
     ]
 }

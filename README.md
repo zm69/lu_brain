@@ -12,12 +12,44 @@ This is an Odin port of an experimental C project I created years ago. The code 
 
 ### 🚧 ___This project is an EXPERIMENTAL, just-for-fun work in progress.___ 🚧
 
-Current accuracy on the Semeion digits sample is weak: **70–79%** (the spread is mostly noise from the random test split).
+Accuracy on the Semeion handwritten digits (1,593 digits, 16×16), 10-fold cross-validation:
 
-But:
-- ‼️It learns in one pass. Each digit is learned instantly and incrementally (about 0.55 s for 1,493 digits).
-- ‼️Nothing has been tuned yet.
+| Mode | Accuracy | Train (1,493 digits, 1 thread) | Match |
+|---|---|---|---|
+| Original C algorithm | ~74.5% | 0.6 s | ~70 ms / digit |
+| Tuned (`CONFIGS[.Semeion_Tuned]`) | **~96.2%** | 0.8 s | ~16 ms / digit |
+
+Results are averaged over 4 random fold splits (range 95.9–96.3%). For reference, k-nearest-neighbour
+on raw pixels gets about 90% on this dataset.
+
+- ‼️It learns in one pass. Each digit is learned instantly and incrementally, with no retraining.
 - ‼️It doesn't use hardware acceleration yet.
+
+### How the tuned mode works
+
+The core algorithm is unchanged; the gain comes from how it is used plus a few new, opt-in config
+options (their defaults reproduce the C version exactly):
+
+- **Patch voting instead of one top cell.** Every training sample gets its own label, linked to all
+  cells of rec level 1 (`link_level_to_label`). Each of those cells is a 2×2 patch pattern.
+  With `Label_Scoring.Sum` a sample scores the sum of its matching patches over the whole image,
+  and the class is voted over the top 5 samples. The original C approach links one label per class
+  to the single top cell. Because every layer averages 2×2 children, that top cell mostly "sees"
+  the center of the image.
+- **Grayscale with fuzzy values.** Images are blurred (3×3 box) into grayscale, quantized into
+  3 value steps, and neighbouring steps also match with a partial signal (`p_fuzzy_radius = 1`).
+- **Shift tolerance.** The test digit is matched at every ±1 px offset (`set_dest_start_pos`), and
+  the best sample scores win.
+- **Faster matching.** `w_match_max_level = 1` stops propagation above the level the labels live on.
+  Results are identical, and matching is about 85× faster.
+
+`samples/semeion_eval` is the evaluation harness. Every option is a command-line flag, for example:
+
+```sh
+cd samples/semeion_eval && odin build . -o:speed -out:out/eval.exe
+out/eval.exe                                            # original C algorithm
+out/eval.exe -per-sample -no-seq-link -scoring:Sum -stop -link-level:1 -match-shift:1 -fuzzy:1 -blur:1 -steps:3 -results:5
+```
 
 ## Why Lu_Brain?
 
@@ -88,7 +120,8 @@ cd src/lu_core && odin test .                            # core containers
 cd samples/semeion && odin run . -o:speed -out:out/semeion.exe
 ```
 
-`samples/semeion` trains on about 1,500 handwritten digits and recognizes 100 held-out ones.
+`samples/semeion` trains on about 1,500 handwritten digits and recognizes 100 held-out ones, using the
+tuned mode. Add `-define:SMN_BASELINE=true` to run the original C approach instead.
 
 ## Legal
 

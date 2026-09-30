@@ -80,6 +80,8 @@ package lu_brain
         results_total: int,
         results_size: int,
         sig_breakpoint: Value,
+        label_scoring: Label_Scoring,
+        max_level: int,
 
         stats: W_Processor_Stats,
     }
@@ -99,6 +101,8 @@ package lu_brain
         self.la_column = la_column
         self.results_size = config.w_match_results_size
         self.sig_breakpoint = config.w_match_sig_breakpoint
+        self.label_scoring = config.w_match_label_scoring
+        self.max_level = config.w_match_max_level
 
         w_queue__init(&self.queue, config.w_match_processor_queue_size, allocator) or_return
         self.results = make([dynamic]Label, 0, self.results_size, allocator) or_return
@@ -189,7 +193,9 @@ package lu_brain
                 assert(fire_sig <= 1.0 + W_MATCH__SIG_EPSILON)
             }
 
-            w_match_processor__fire_n_parents_with_sig(self, n_cell, item.s_column, fire_sig) or_return
+            if self.max_level == 0 || s__get_level(self.s, n_cell.addr) < self.max_level {
+                w_match_processor__fire_n_parents_with_sig(self, n_cell, item.s_column, fire_sig) or_return
+            }
 
             if n_cell.labels != LA_LINK_IX__NULL {
                 when DEEP_DEBUG do fmt.printf("\nN_CELL has label (cell_ix=%v) link=%v", n_cell.addr.cell_ix, n_cell.labels)
@@ -204,11 +210,40 @@ package lu_brain
         return
     }
 
+    // Inserts label into the sorted results (best first), keeping at most results_size labels.
+    // Equal labels are ranked after existing ones.
+    @(private="file")
+    w_match_processor__add_result_sorted :: proc(self: ^W_Match_Processor, label: Label) -> runtime.Allocator_Error {
+        if len(self.results) >= self.results_size {
+            if label__compare(self.results[len(self.results) - 1], label) <= 0 do return nil
+            pop(&self.results)
+            pop(&self.results_hidden)
+            self.results_total -= 1
+        }
+
+        ix := len(self.results)
+        for r, i in self.results {
+            if label__compare(label, r) < 0 {
+                ix = i
+                break
+            }
+        }
+
+        inject_at(&self.results, ix, label) or_return
+        inject_at(&self.results_hidden, ix, 0) or_return
+        self.results_total += 1
+
+        return nil
+    }
+
     // Inserts label into the sorted results (best first), replicating the C sorted skip list:
     //   - a label that compares equal (0) to an existing result is counted but hidden behind it,
     //   - hidden labels count toward results_size and are dropped before visible ones.
+    // Used for Label_Scoring.Max (C behavior).
     @(private="file")
     w_match_processor__add_result :: proc(self: ^W_Match_Processor, label: Label) -> runtime.Allocator_Error {
+        if self.label_scoring != .Max do return w_match_processor__add_result_sorted(self, label)
+
         if self.results_total >= self.results_size {
             last := len(self.results) - 1
             if label__compare(self.results[last], label) <= 0 do return nil
@@ -256,7 +291,7 @@ package lu_brain
 
             w_match_processor__add_result(self, Label{
                 id = la_cell.la_ix,
-                sig = match_cell.sig,
+                sig = w_la_match_cell__score(match_cell, self.label_scoring),
                 sig_received_count = match_cell.sig_received_count,
             }) or_return
         }

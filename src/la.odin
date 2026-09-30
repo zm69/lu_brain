@@ -84,6 +84,7 @@ package lu_brain
     W_La_Match_Cell :: struct {
         block_id: Block_Id,
         sig: Value,                 // max received sig
+        sig_sum: Value,             // sum of received sigs
         n_addr: N_Addr,             // cell that sent the max sig (debug)
         sig_received_count: Value,
     }
@@ -105,7 +106,17 @@ package lu_brain
             self.sig = sig
             self.n_addr = n_addr
         }
+        self.sig_sum += sig
         self.sig_received_count += 1
+    }
+
+    w_la_match_cell__score :: proc "contextless" (self: ^W_La_Match_Cell, scoring: Label_Scoring) -> Value {
+        switch scoring {
+            case .Max: return self.sig
+            case .Sum: return self.sig_sum
+            case .Mean: return self.sig_received_count > 0 ? self.sig_sum / self.sig_received_count : 0
+        }
+        return self.sig
     }
 
 ///////////////////////////////////////////////////////////////////////////////

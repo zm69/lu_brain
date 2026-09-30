@@ -39,9 +39,15 @@ package lu_brain
         layer_ix: int,
         area_ix: int,
 
+        // Distance above the rec base layer (rec base = 0, its parents = 1, ...). Layers outside
+        // rec areas (frame, seq) are set to S_LAYER__LEVEL_TOP, comp layers to -1.
+        level: int,
+
         p: S_Layer,
         c: [dynamic]S_Layer,
     }
+
+    S_LAYER__LEVEL_TOP :: max(int) / 2
 
     s_layer_base__init :: proc(self: ^S_Layer_Base, type: S_Layer_Type, tag: Area_Tag, layer_ix, area_ix: int, allocator: runtime.Allocator) -> runtime.Allocator_Error {
         self.allocator = allocator
@@ -49,6 +55,7 @@ package lu_brain
         self.tag = tag
         self.layer_ix = layer_ix
         self.area_ix = area_ix
+        self.level = S_LAYER__LEVEL_TOP
         self.p = nil
         self.c = make([dynamic]S_Layer, 0, 1, allocator) or_return
         return nil
@@ -142,6 +149,10 @@ package lu_brain
     S_View_P :: struct {
         comp_calc: Comp_Calc,
 
+        // Match only, see Rec_Comp_Config
+        fuzzy_radius: int,
+        null_damping: Value,
+
         n_comp_table: S_Table_Comp,
         w_save_tables: []W_Table_P,
         w_match_tables: []W_Table_P,
@@ -196,6 +207,34 @@ package lu_brain
         return nil
     }
 
+    // Fires the parents of the VP cell a w_cell_p was saved to. With the defaults
+    // (fuzzy_radius = 0, null_damping = 0) this is the C behavior: one cell, sig 1.0.
+    s_view_p__fire_match :: proc(self: ^S_View_P, w_cell_p: ^W_Cell_P, processor: ^W_Match_Processor) -> Error {
+        s_column_comp := w_cell_p.s_column_comp
+        z := w_cell_p.n_cell_vp.z
+        null_sig := 1.0 - self.null_damping
+
+        sig := z == 0 ? null_sig : 1.0
+        if sig > 0 do w_match_processor__fire_vp_parents_with_sig(processor, w_cell_p.n_cell_vp, s_column_comp, sig) or_return
+
+        if self.fuzzy_radius == 0 do return nil
+
+        comp_calc := &self.comp_calc
+        val := comp_calc__norm(comp_calc, w_cell_p__calc_p(w_cell_p))
+
+        for zz in max(0, z - self.fuzzy_radius)..=min(len(s_column_comp.cells) - 1, z + self.fuzzy_radius) {
+            if zz == z do continue
+
+            neighbour_sig := comp_calc__calc_sig(comp_calc, zz, val)
+            if zz == 0 do neighbour_sig *= null_sig
+            if neighbour_sig <= 0 do continue
+
+            w_match_processor__fire_vp_parents_with_sig(processor, &s_column_comp.cells[zz], s_column_comp, neighbour_sig) or_return
+        }
+
+        return nil
+    }
+
 ///////////////////////////////////////////////////////////////////////////////
 // S_Layer_Comp
 
@@ -218,6 +257,8 @@ package lu_brain
 
         rec := frame.rec
         s_view_p__init(&self.p_view, config, rec.width, rec.height, rc_config.v_min, rc_config.v_max, rc_config.p_neu_size, layer_ix, area_ix, allocator) or_return
+        self.p_view.fuzzy_radius = rc_config.p_fuzzy_radius
+        self.p_view.null_damping = rc_config.p_null_damping
 
         return
     }
@@ -464,7 +505,7 @@ package lu_brain
                     when DEEP_DEBUG do fmt.printf("%v ", w_cell_p.n_cell_vp.addr.cell_ix)
 
                     if wave_type == .Match {
-                        w_match_processor__fire_vp_parents_with_sig(processor, w_cell_p.n_cell_vp, w_cell_p.s_column_comp, 1.0) or_return
+                        s_view_p__fire_match(s_view_p, w_cell_p, processor) or_return
                     }
                 }
 

@@ -199,10 +199,12 @@ package lu_brain
             self.rec_to_area[i] = rec_area_ix
 
             rec_base := s__create_layer_rec(self, rec_area_ix, rec) or_return
+            rec_base.level = 0
             self.v_recs[i] = rec_base
 
             for z in 0..<rec.depth {
                 comp := s__create_layer_comp(self, rec_area_ix, rec_base, rec_config__get_comp_config(&rec.config, z)) or_return
+                comp.level = -1
                 s_layer__connect(rec_base, comp) or_return
             }
 
@@ -215,6 +217,7 @@ package lu_brain
                 if h > 1 do h -= 1
 
                 rec_layer := s__create_layer_n(self, rec_area_ix, w, h, h) or_return
+                rec_layer.level = s_layer__base(apex).level + 1
                 s_layer__connect(rec_layer, apex) or_return
                 apex = rec_layer
 
@@ -313,6 +316,11 @@ package lu_brain
         area := s__get_area(self, int(addr.area_ix))
         when VALIDATIONS do assert(area != nil)
         return s_layer__find_n_cell(area.layers[addr.layer_ix], addr)
+    }
+
+    // Level of the layer an n_cell lives in, see S_Layer_Base.level.
+    s__get_level :: #force_inline proc(self: ^S, addr: N_Addr) -> int {
+        return s_layer__base(self.areas[addr.area_ix].layers[addr.layer_ix]).level
     }
 
     s__get_net_stats :: proc(self: ^S) -> (stats: Net_Stats) {

@@ -225,6 +225,30 @@ package lu_brain
         return la_column__save_label(&self.brain.la_column, w_cell__n_cell(w_cell), label)
     }
 
+    // Links label to every n_cell the last save landed on in the rec layer at `level`
+    // (1 = first layer above the rec base). Returns how many cells were linked.
+    //
+    // Linking a label per training sample at a low level turns matching into patch voting:
+    // with Label_Scoring.Sum a sample scores the sum of its matching patches over the whole input.
+    save_wave__link_level_to_label :: proc(self: ^Save_Wave, rec: ^Rec, level: int, label: int) -> (linked: int, err: Error) {
+        rec_area := s__get_rec_area(&self.brain.s, rec.id)
+
+        for layer, layer_ix in rec_area.layers {
+            n, ok := layer.(^S_Layer_N)
+            if !ok || n.level != level do continue
+
+            for y in 0..<n.s_table.h {
+                for x in 0..<n.s_table.w {
+                    save_wave__link_to_label(self, rec_area.area_ix, layer_ix, x, y, label) or_return
+                    linked += 1
+                }
+            }
+            return
+        }
+
+        return 0, API_Error.Invalid_Argument
+    }
+
     save_wave__reset :: proc(self: ^Save_Wave) {
         data_wave__reset(&self.data_wave)
     }
@@ -284,6 +308,13 @@ package lu_brain
     // Matched labels, best first. Valid until the next match.
     match_wave__results :: proc(self: ^Match_Wave) -> []Label {
         return self.processor.results[:]
+    }
+
+    // Overrides Config.w_match_sig_breakpoint for this wave, e.g. to retry with a lower one.
+    match_wave__set_sig_breakpoint :: proc(self: ^Match_Wave, breakpoint: Value) -> Error {
+        if breakpoint <= 0 || breakpoint > 1 do return API_Error.Invalid_Argument
+        self.processor.sig_breakpoint = breakpoint
+        return nil
     }
 
     match_wave__fired_cells_count :: proc(self: ^Match_Wave) -> int {
