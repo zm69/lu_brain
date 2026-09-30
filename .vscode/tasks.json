@@ -1,0 +1,214 @@
+{
+    "version": "2.0.0",
+    "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+    },
+    "problemMatcher": {
+        "owner": "odin",
+        "source": "Odin",
+        "fileLocation": "absolute",
+        "pattern": {
+            "regexp": "^(.*?)(\\((\\d+):(\\d+)\\))\\s+(Syntax\\s+)?(Error|Warning):\\s+(.+)$",
+            "file": 1,
+            "line": 3,
+            "column": 4,
+            "severity": 6,
+            "message": 7
+        }
+    },
+    "tasks": [
+        {
+            "label": "Tests",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "test",
+                "${workspaceFolder}/tests/",
+                "-debug",
+                "-o:none",
+                "-out:tests.exe",
+                "-define:ODIN_TEST_THREADS=1",
+                "-define:ODIN_TEST_RANDOM_SEED=1",
+                "-define:ODIN_TEST_LOG_LEVEL=warning",
+                "-define:ODIN_TEST_FANCY=false",
+                "-define:ODIN_TEST_CLIPBOARD=false",
+                "-define:ODIN_TEST_PROGRESS_WIDTH=0",
+                "-define:ODIN_TEST_SHORT_LOGS=true"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/tests/out/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
+        },
+        {
+            "label": "Tests No Validations",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "test",
+                "${workspaceFolder}/tests/",
+                "-o:speed",
+                "-out:tests_nv.exe",
+                "-define:LU_VALIDATIONS=false",
+                "-define:ODIN_TEST_THREADS=1",
+                "-define:ODIN_TEST_RANDOM_SEED=1",
+                "-define:ODIN_TEST_LOG_LEVEL=warning",
+                "-define:ODIN_TEST_FANCY=false",
+                "-define:ODIN_TEST_CLIPBOARD=false",
+                "-define:ODIN_TEST_PROGRESS_WIDTH=0",
+                "-define:ODIN_TEST_SHORT_LOGS=true"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/tests/out/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
+        },
+        {
+            "label": "Core Tests",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "test",
+                "${workspaceFolder}/src/lu_core/",
+                "-debug",
+                "-o:none",
+                "-out:core_tests.exe",
+                "-define:ODIN_TEST_THREADS=1",
+                "-define:ODIN_TEST_RANDOM_SEED=1",
+                "-define:ODIN_TEST_LOG_LEVEL=warning",
+                "-define:ODIN_TEST_FANCY=false",
+                "-define:ODIN_TEST_CLIPBOARD=false",
+                "-define:ODIN_TEST_PROGRESS_WIDTH=0",
+                "-define:ODIN_TEST_SHORT_LOGS=true"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/src/out/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
+        },
+        {
+            "label": "Check",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "check",
+                "${workspaceFolder}/src/",
+                "-no-entry-point",
+                "-vet"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/src/out/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
+        },
+        {
+            "label": "Semeion",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "run",
+                "${workspaceFolder}/samples/semeion",
+                "-o:speed",
+                "-out:out/semeion.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/samples/semeion/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
+        },
+        {
+            "label": "Semeion Debug",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "run",
+                "${workspaceFolder}/samples/semeion",
+                "-debug",
+                "-out:out/semeion_debug.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/samples/semeion/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
+        }
+    ]
+}

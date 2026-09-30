@@ -1,0 +1,24 @@
+# Ignore  .md files 
+*.md
+
+# Allow the README.md file 
+!/README.md
+!docs/*.md
+
+
+# Build outputs
+src/out/*
+!src/out/.keep
+
+tests/out/*
+!tests/out/.keep
+
+samples/**/out/*
+!samples/**/out/.keep
+
+*.exe
+*.pdb
+
+# Editor
+ols.json
+*.code-workspace
