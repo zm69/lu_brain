@@ -396,6 +396,7 @@ package lu_brain
             if n_link_mem__links_count(&la_column.n_link_mem) < before do la_cell.children_count -= 1
         }
         la_link_mem__free_all(&la_column.la_link_mem, &located.n_cell.labels) or_return
+        located.n_cell.labels_count = 0
 
         w_del_processor__add(&self.processor, located.s_column, u32(n_addr.cell_ix), force = true) or_return
 

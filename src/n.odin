@@ -142,6 +142,7 @@ package lu_brain
         addr: N_Addr,
 
         labels: La_Link_Ix,
+        labels_count: u32,  // length of the labels list, for pattern weights
 
         parents: [W_Child_Pos]N_Link_Ix,
         children: N_Link_Ix,
@@ -231,11 +232,14 @@ package lu_brain
 
     n_cell__prepend_label :: proc(self: ^N_Cell, la_ix: int, la_link_mem: ^La_Link_Mem) -> runtime.Allocator_Error {
         self.labels = la_link_mem__prepend(la_link_mem, self.labels, la_ix) or_return
+        self.labels_count += 1
         return nil
     }
 
     n_cell__remove_link_to_label :: proc(self: ^N_Cell, la_ix: int, la_link_mem: ^La_Link_Mem) -> runtime.Allocator_Error {
-        return la_link_mem__remove(la_link_mem, &self.labels, la_ix)
+        removed := la_link_mem__remove(la_link_mem, &self.labels, la_ix) or_return
+        if removed do self.labels_count -= 1
+        return nil
     }
 
     // Removes links to parent from every child->parent slot.

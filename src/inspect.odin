@@ -53,10 +53,8 @@ package lu_brain
     }
 
     // Number of labels linked to a cell, without allocating.
-    brain__cell_labels_count :: proc(self: ^Brain, n_cell: ^N_Cell) -> (count: int) {
-        link_mem := &self.la_column.la_link_mem
-        for link := la_link_mem__get(link_mem, n_cell.labels); link != nil; link = la_link_mem__get(link_mem, link.next) do count += 1
-        return
+    brain__cell_labels_count :: proc(self: ^Brain, n_cell: ^N_Cell) -> int {
+        return int(n_cell.labels_count)
     }
 
     // Live cells linked to a label.
@@ -81,6 +79,14 @@ package lu_brain
         x: int,
         y: int,
         sig: Value, // fire sig, 0..1
+    }
+
+    // Weight the last match applied to a cell's signal to its labels (Config.w_match_idf_power /
+    // w_match_purity_power); 1 when pattern weights are off. Link weights come on top, see learn.odin.
+    match_wave__pattern_weight :: proc(self: ^Match_Wave, addr: N_Addr) -> Value {
+        n_cell := brain__get_n_cell(self.brain, addr)
+        if n_cell == nil do return 0
+        return w_match_processor__pattern_weight(&self.processor, n_cell)
     }
 
     // Cells of the rec layer at `level` that fired in the last match of this wave.

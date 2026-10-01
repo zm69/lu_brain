@@ -19,6 +19,12 @@ package lu_brain
 
     LA_IX__NULL :: max(int)
 
+    // Label groups (e.g. classes) used by Config.w_match_purity_power. Groups >= this are ignored there.
+    LA_GROUPS__MAX :: 64
+    LA_GROUP__NONE :: -1
+
+    LA_LINK__WEIGHT_MAX :: 4.0
+
 ///////////////////////////////////////////////////////////////////////////////
 // La_Link -- singly linked list node of label indexes (n_cell -> labels).
 
@@ -29,6 +35,7 @@ package lu_brain
     La_Link :: struct {
         la_ix: int,
         next: La_Link_Ix,
+        weight: Value,  // multiplies the cell's signal to this label, 1 by default (C), see reinforce
     }
 
     La_Link_Mem :: lc.Pool(La_Link)
@@ -53,11 +60,13 @@ package lu_brain
         link := la_link_mem__get(self, La_Link_Ix(ix))
         link.la_ix = la_ix
         link.next = head
+        link.weight = 1
 
         return La_Link_Ix(ix), nil
     }
 
-    la_link_mem__remove :: proc(self: ^La_Link_Mem, head: ^La_Link_Ix, la_ix: int) -> runtime.Allocator_Error {
+    // Removes the first link to la_ix. Returns true if one was removed.
+    la_link_mem__remove :: proc(self: ^La_Link_Mem, head: ^La_Link_Ix, la_ix: int) -> (removed: bool, err: runtime.Allocator_Error) {
         prev: ^La_Link = nil
         ix := head^
 
@@ -68,14 +77,14 @@ package lu_brain
                 if prev != nil do prev.next = link.next
                 else do head^ = link.next
 
-                return lc.pool__free(self, u32(ix))
+                return true, lc.pool__free(self, u32(ix))
             }
 
             prev = link
             ix = link.next
         }
 
-        return nil
+        return false, nil
     }
 
     // Frees every link of the list starting at head^ and sets head^ to null.
@@ -140,11 +149,13 @@ package lu_brain
         children: N_Link_Ix,        // n_cells linked to this label (in La_Column.n_link_mem)
         children_count: int,
 
+        group: int,                 // optional, e.g. the class of a per-sample label; LA_GROUP__NONE if unset
+
         w_match_cells: [LA_CELL__MATCH_CELLS_SIZE]W_La_Match_Cell,
     }
 
     la_cell__init :: proc "contextless" (self: ^La_Cell, la_ix: int) {
-        self^ = { la_ix = la_ix }
+        self^ = { la_ix = la_ix, group = LA_GROUP__NONE }
         for &c in self.w_match_cells do w_la_match_cell__reset(&c)
     }
 

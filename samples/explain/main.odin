@@ -391,12 +391,16 @@ package explain
     }
 
     // Per-sample score from the fired patches at one offset; the same Label_Scoring.Sum score the
-    // brain computed, rebuilt from the memory.
+    // brain computed (fire sig * pattern weight * link weight), rebuilt from the memory.
     sample_scores :: proc(self: ^Brain, fired: []lu.Fired_Cell) -> map[int]lu.Value {
         scores := make(map[int]lu.Value, 1024, context.temp_allocator)
         for c in fired {
+            pattern_weight := lu.pattern_weight(&self.match_wave, c.addr)
             labels, _ := lu.cell_labels(&self.brain, c.addr, context.temp_allocator)
-            for l in labels do scores[l] += c.sig
+            for l in labels {
+                link_weight, _ := lu.link_weight(&self.brain, c.addr, l)
+                scores[l] += c.sig * pattern_weight * link_weight
+            }
         }
         return scores
     }

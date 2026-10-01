@@ -41,6 +41,10 @@ package lu_brain
         w_match_sig_breakpoint: Value,          // (0, 1]
         w_match_label_scoring: Label_Scoring,   // C: .Max
         w_match_max_level: int,                 // stop firing parents at this rec layer level, 0 = no limit (C)
+
+        // Pattern weights when a fired cell signals its labels (0 = off, C). See la.odin.
+        w_match_idf_power: Value,               // (log((labels + 1) / labels of the cell))^power: rare patterns count more
+        w_match_purity_power: Value,            // (majority group share among the cell's labels)^power
         w_match_processor_queue_size: int,
         w_match_results_size: int,
         w_match_cells_size_per_wave: int,
@@ -144,6 +148,7 @@ package lu_brain
             w_match_sig_breakpoint = 0.4,
             w_match_label_scoring = .Sum,
             w_match_max_level = 1,
+            w_match_idf_power = 0.2,
             w_match_processor_queue_size = 4096,
             w_match_results_size = 5,
             w_match_cells_size_per_wave = 1 << 16,
@@ -170,6 +175,7 @@ package lu_brain
         if self.w_delete_waves_size <= 0 do return API_Error.Invalid_Config
         if self.w_match_sig_breakpoint <= 0 || self.w_match_sig_breakpoint > 1 do return API_Error.Invalid_Config
         if self.w_match_max_level < 0 do return API_Error.Invalid_Config
+        if self.w_match_idf_power < 0 || self.w_match_purity_power < 0 do return API_Error.Invalid_Config
         if self.w_match_processor_queue_size <= 0 do return API_Error.Invalid_Config
         if self.w_match_results_size <= 0 do return API_Error.Invalid_Config
         if self.w_match_cells_size_per_wave <= 1 do return API_Error.Invalid_Config

@@ -72,6 +72,15 @@ package lu_brain
     cell_labels_count :: brain__cell_labels_count
     label_cells :: brain__label_cells
     fired_cells :: match_wave__fired_cells
+    pattern_weight :: match_wave__pattern_weight
+
+///////////////////////////////////////////////////////////////////////////////
+// Learning
+
+    set_label_group :: brain__set_label_group
+    link_weight :: brain__link_weight
+    adjust_link_weight :: brain__adjust_link_weight
+    reinforce :: match_wave__reinforce
 
 ///////////////////////////////////////////////////////////////////////////////
 // Rec view

@@ -71,6 +71,19 @@ package semeion_eval
         mode: Mode                  `usage:"Brain (Lu_Brain), Knn (pixel k-nearest-neighbour) or Patch (patch score without the graph)."`,
         holdout: Holdout            `usage:"None: CV on all digits. Tune: CV on half A only. Test: train on A, test once on half B."`,
         stop_save: bool             `usage:"Build the net only up to link-level on save (s_save_max_level)."`,
+        candidates: int             `usage:"Hybrid: distinct brain candidates passed to kNN re-ranking / fusion."`,
+        idf: f64                    `usage:"Hybrid: pattern weight idf power (Config.w_match_idf_power, 0 = off)."`,
+        purity: f64                 `usage:"Hybrid: pattern weight class-purity power (Config.w_match_purity_power, 0 = off)."`,
+        learn_epochs: int           `usage:"Hybrid: leave-one-out correction passes over the training digits (reinforce)."`,
+        learn_rate: f64             `usage:"Hybrid: reinforce rate."`,
+        learn_mode: Learn_Mode      `usage:"Hybrid: Both (demote the wrong winner, promote the right one), Demote or Promote only."`,
+        evidence: bool              `usage:"Hybrid: evidence-map re-ranking variants A, B, C (evidence.odin)."`,
+        idm: bool                   `usage:"Hybrid: image distortion model variants (idm.odin)."`,
+        idm_mu_a: f64               `usage:"Hybrid: IDM displacement penalty a."`,
+        idm_mu_b: f64               `usage:"Hybrid: IDM displacement penalty b."`,
+        idm_mu_c: f64               `usage:"Hybrid: IDM displacement penalty c."`,
+        evidence_epochs: int        `usage:"Hybrid: perceptron passes for the B position weights (0 = skip B)."`,
+        evidence_rate: f64          `usage:"Hybrid: learning rate of the B position weights."`,
 
         verbose: bool               `usage:"Print per-fold results."`,
     }
@@ -79,6 +92,13 @@ package semeion_eval
         Brain,
         Knn,
         Patch,
+        Hybrid,
+    }
+
+    Learn_Mode :: enum {
+        Both,
+        Demote,
+        Promote,
     }
 
     Holdout :: enum {
@@ -104,6 +124,13 @@ package semeion_eval
             steps = 2,
             fuzzy = 0,
             null_damping = 0,
+            candidates = 20,
+            learn_rate = 0.1,
+            evidence_epochs = 3,
+            idm_mu_a = 0,
+            idm_mu_b = 0.05,
+            idm_mu_c = 0.1,
+            evidence_rate = 0.02,
         }
     }
 
@@ -200,6 +227,9 @@ package semeion_eval
         match_sec: f64,
         cells: int,
         peak_mb: f64,
+        variants: [Variant]int,
+        learn_errors_first: int,    // training errors in the first / last correction pass
+        learn_errors_last: int,
         err: lu.Error,
     }
 
@@ -216,6 +246,7 @@ package semeion_eval
             case .Brain: r.err = fold__run_internal(eval, fold, &r)
             case .Knn: fold__run_knn(eval, fold, &r)
             case .Patch: fold__run_patch(eval, fold, &r)
+            case .Hybrid: r.err = fold__run_hybrid(eval, fold, &r)
         }
         return
     }
@@ -537,6 +568,25 @@ package semeion_eval
             total.match_sec += r.match_sec
             total.cells += r.cells
             total.peak_mb = max(total.peak_mb, r.peak_mb)
+            for v in Variant do total.variants[v] += r.variants[v]
+            total.learn_errors_first += r.learn_errors_first
+            total.learn_errors_last += r.learn_errors_last
+        }
+
+        if opts.mode == .Hybrid {
+            if opts.learn_epochs > 0 {
+                fmt.printfln("  learning: leave-one-out training errors %d (first pass) -> %d (last pass), summed over folds",
+                    total.learn_errors_first, total.learn_errors_last)
+            }
+            for v in Variant {
+                if v >= .Ev_A1_0 && v <= .Ev_C_K5 && !opts.evidence do continue
+                if v >= .Idm_Local_A && v <= .Idm_Global_C && !opts.idm do continue
+                if v < .Only_Brain_Wrong {
+                    fmt.printfln("  %-16s %.2f%%", VARIANT__NAMES[v], f64(total.variants[v]) * 100 / f64(total.tested))
+                } else {
+                    fmt.printfln("  %-16s %d digits", VARIANT__NAMES[v], total.variants[v])
+                }
+            }
         }
 
         fmt.printfln(
@@ -549,7 +599,7 @@ package semeion_eval
 
     options__summary :: proc(o: ^Options) -> string {
         return fmt.tprintf(
-            "holdout=%v stop_save=%v bp=%v vp_bp=%v n_bp=%v scoring=%v results=%v steps=%v fuzzy=%v null_damping=%v blur=%v shift=%v match_shift=%v link_layers=%v link_skip=%v link_level=%v stop=%v link_frame=%v no_seq_link=%v per_sample=%v retry=%v",
-            o.holdout, o.stop_save, o.bp, o.vp_bp, o.n_bp, o.scoring, o.results, o.steps, o.fuzzy, o.null_damping, o.blur, o.shift, o.match_shift, o.link_layers, o.link_skip, o.link_level, o.stop, o.link_frame, o.no_seq_link, o.per_sample, o.retry,
+            "idm_mu=%v/%v/%v idf=%v purity=%v learn=%v/%v/%v holdout=%v stop_save=%v bp=%v vp_bp=%v n_bp=%v scoring=%v results=%v steps=%v fuzzy=%v null_damping=%v blur=%v shift=%v match_shift=%v link_layers=%v link_skip=%v link_level=%v stop=%v link_frame=%v no_seq_link=%v per_sample=%v retry=%v",
+            o.idm_mu_a, o.idm_mu_b, o.idm_mu_c, o.idf, o.purity, o.learn_epochs, o.learn_rate, o.learn_mode, o.holdout, o.stop_save, o.bp, o.vp_bp, o.n_bp, o.scoring, o.results, o.steps, o.fuzzy, o.null_damping, o.blur, o.shift, o.match_shift, o.link_layers, o.link_skip, o.link_level, o.stop, o.link_frame, o.no_seq_link, o.per_sample, o.retry,
         )
     }

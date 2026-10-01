@@ -8,6 +8,7 @@ package lu_brain
 
 // Core
     import "core:fmt"
+    import "core:math"
 
 ///////////////////////////////////////////////////////////////////////////////
 // W_Queue -- double-buffered work list: items added while processing `curr` go to `next`.
@@ -82,6 +83,9 @@ package lu_brain
         sig_breakpoint: Value,
         label_scoring: Label_Scoring,
         max_level: int,
+        idf_power: Value,
+        purity_power: Value,
+        labels_used: int,   // labels with cells, for idf, counted at the start of every run
 
         stats: W_Processor_Stats,
     }
@@ -103,6 +107,8 @@ package lu_brain
         self.sig_breakpoint = config.w_match_sig_breakpoint
         self.label_scoring = config.w_match_label_scoring
         self.max_level = config.w_match_max_level
+        self.idf_power = config.w_match_idf_power
+        self.purity_power = config.w_match_purity_power
 
         w_queue__init(&self.queue, config.w_match_processor_queue_size, allocator) or_return
         self.results = make([dynamic]Label, 0, self.results_size, allocator) or_return
@@ -170,13 +176,47 @@ package lu_brain
 
         link_mem := &self.la_column.la_link_mem
 
+        weighted_sig := sig * w_match_processor__pattern_weight(self, n_cell)
+
         for link := la_link_mem__get(link_mem, n_cell.labels); link != nil; link = la_link_mem__get(link_mem, link.next) {
             la_cell := la_column__get_la_cell(self.la_column, link.la_ix)
             when VALIDATIONS do assert(la_cell != nil)
 
             match_cell := la_cell__get_and_reset_match_cell(la_cell, self.block_id, self.wave_ix)
-            w_la_match_cell__add_sig(match_cell, n_cell.addr, sig)
+            w_la_match_cell__add_sig(match_cell, n_cell.addr, weighted_sig * link.weight)
         }
+    }
+
+    // Weight of a fired cell's signal to its labels: 1 unless idf / purity weighting is enabled.
+    w_match_processor__pattern_weight :: proc(self: ^W_Match_Processor, n_cell: ^N_Cell) -> (weight: Value) {
+        weight = 1
+        if self.idf_power == 0 && self.purity_power == 0 do return
+
+        link_mem := &self.la_column.la_link_mem
+
+        labels := int(n_cell.labels_count)
+        if labels == 0 do return
+
+        groups: [LA_GROUPS__MAX]int
+        if self.purity_power > 0 {
+            for link := la_link_mem__get(link_mem, n_cell.labels); link != nil; link = la_link_mem__get(link_mem, link.next) {
+                group := self.la_column.cells[link.la_ix].group
+                if group >= 0 && group < LA_GROUPS__MAX do groups[group] += 1
+            }
+        }
+
+        if self.idf_power > 0 {
+            idf := math.ln(Value(self.labels_used + 1) / Value(labels))
+            weight *= math.pow(max(idf, 0), self.idf_power)
+        }
+
+        if self.purity_power > 0 {
+            majority := 0
+            for n in groups do majority = max(majority, n)
+            if majority > 0 do weight *= math.pow(Value(majority) / Value(labels), self.purity_power)
+        }
+
+        return
     }
 
     w_match_processor__run_iteration :: proc(self: ^W_Match_Processor) -> (cells_processed: int, err: Error) {
@@ -300,6 +340,11 @@ package lu_brain
     }
 
     w_match_processor__run :: proc(self: ^W_Match_Processor) -> Error {
+        if self.idf_power > 0 {
+            self.labels_used = 0
+            for &la_cell in self.la_column.cells do if la_cell.children_count > 0 do self.labels_used += 1
+        }
+
         for w_queue__has_next(&self.queue) {
             when DEEP_DEBUG {
                 fmt.printf("\nMATCH PROCESSOR BATCH:")
