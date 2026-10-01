@@ -45,6 +45,7 @@ package lu_brain
         w_match_results_size: int,
         w_match_cells_size_per_wave: int,
         w_delete_waves_size: int,
+        w_delete_keep_labeled: bool,            // delete_label keeps cells other labels still use, C: false
         w_restore_waves_size: int,              // <= N_CELL__W_RESTORE_CELLS_SIZE
 
         //
@@ -147,6 +148,7 @@ package lu_brain
             w_match_results_size = 5,
             w_match_cells_size_per_wave = 1 << 16,
             w_delete_waves_size = 1,
+            w_delete_keep_labeled = true,
             w_restore_waves_size = 1,
             la_labels_size = 2048,
             la_link_mem_size = 1024,

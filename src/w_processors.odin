@@ -335,16 +335,19 @@ package lu_brain
     W_Del_Item :: struct {
         s_column: ^S_Column,
         cell_ix: u32,
+        force: bool,    // delete even if the cell still has labels (explicit delete_neuron)
     }
 
     W_Del_Processor :: struct {
         s: ^S,
+        keep_labeled: bool, // not C: keep cells that are still linked to other labels
         queue: W_Queue(W_Del_Item),
         stats: W_Processor_Stats,
     }
 
     w_del_processor__init :: proc(self: ^W_Del_Processor, s: ^S, list_size: int, allocator: runtime.Allocator) -> runtime.Allocator_Error {
         self.s = s
+        self.keep_labeled = s.config.w_delete_keep_labeled
         return w_queue__init(&self.queue, list_size, allocator)
     }
 
@@ -352,8 +355,8 @@ package lu_brain
         return w_queue__terminate(&self.queue)
     }
 
-    w_del_processor__add :: proc(self: ^W_Del_Processor, s_column: ^S_Column, cell_ix: u32) -> runtime.Allocator_Error {
-        _, err := append(&self.queue.next, W_Del_Item{ s_column = s_column, cell_ix = cell_ix })
+    w_del_processor__add :: proc(self: ^W_Del_Processor, s_column: ^S_Column, cell_ix: u32, force := false) -> runtime.Allocator_Error {
+        _, err := append(&self.queue.next, W_Del_Item{ s_column = s_column, cell_ix = cell_ix, force = force })
         return err
     }
 
@@ -366,6 +369,9 @@ package lu_brain
 
             // Still used by other parents
             if n_cell__has_parents(n_cell) do continue
+
+            // Still used by other labels (not C, see Config.w_delete_keep_labeled)
+            if self.keep_labeled && !item.force && n_cell.labels != LA_LINK_IX__NULL do continue
 
             if n_cell.children != N_LINK_IX__NULL {
                 link_mem := &s_column.link_mem

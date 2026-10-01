@@ -266,6 +266,34 @@
                 "clear": true,
                 "close": false
             }
+        },
+        {
+            "label": "Explain",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "type": "shell",
+            "isBackground": false,
+            "command": "odin",
+            "args": [
+                "run",
+                "${workspaceFolder}/samples/explain",
+                "-o:speed",
+                "-out:out/explain.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/samples/explain/"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true,
+                "close": false
+            }
         }
     ]
 }

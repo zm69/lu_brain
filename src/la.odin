@@ -78,6 +78,18 @@ package lu_brain
         return nil
     }
 
+    // Frees every link of the list starting at head^ and sets head^ to null.
+    la_link_mem__free_all :: proc(self: ^La_Link_Mem, head: ^La_Link_Ix) -> runtime.Allocator_Error {
+        ix := head^
+        for ix != LA_LINK_IX__NULL {
+            next := la_link_mem__get(self, ix).next
+            lc.pool__free(self, u32(ix)) or_return
+            ix = next
+        }
+        head^ = LA_LINK_IX__NULL
+        return nil
+    }
+
 ///////////////////////////////////////////////////////////////////////////////
 // W_La_Match_Cell -- per-wave match state of a label.
 

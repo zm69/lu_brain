@@ -63,6 +63,17 @@ package lu_brain
     print_net_stats :: brain__print_net_stats
 
 ///////////////////////////////////////////////////////////////////////////////
+// Inspection
+
+    level_layer :: brain__level_layer
+    get_n_cell :: brain__get_n_cell
+    is_cell_live :: brain__is_cell_live
+    cell_labels :: brain__cell_labels
+    cell_labels_count :: brain__cell_labels_count
+    label_cells :: brain__label_cells
+    fired_cells :: match_wave__fired_cells
+
+///////////////////////////////////////////////////////////////////////////////
 // Rec view
 //
 // The view belongs to the rec and is captured on every push.

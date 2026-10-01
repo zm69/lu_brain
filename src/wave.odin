@@ -385,7 +385,19 @@ package lu_brain
         located, ok := s__find_n_cell(&self.brain.s, n_addr).(N_Located_N)
         if !ok do return API_Error.Invalid_N_Addr
 
-        w_del_processor__add(&self.processor, located.s_column, u32(n_addr.cell_ix)) or_return
+        // unlink the cell from its labels, so label -> cells stays accurate
+        la_column := &self.brain.la_column
+        for link := la_link_mem__get(&la_column.la_link_mem, located.n_cell.labels); link != nil; link = la_link_mem__get(&la_column.la_link_mem, link.next) {
+            la_cell := la_column__get_la_cell(la_column, link.la_ix)
+            if la_cell == nil do continue
+
+            before := n_link_mem__links_count(&la_column.n_link_mem)
+            n_link_mem__remove(&la_column.n_link_mem, &la_cell.children, n_addr) or_return
+            if n_link_mem__links_count(&la_column.n_link_mem) < before do la_cell.children_count -= 1
+        }
+        la_link_mem__free_all(&la_column.la_link_mem, &located.n_cell.labels) or_return
+
+        w_del_processor__add(&self.processor, located.s_column, u32(n_addr.cell_ix), force = true) or_return
 
         return w_del_processor__run(&self.processor)
     }

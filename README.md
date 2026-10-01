@@ -46,6 +46,39 @@ What this shows:
   and editable memories, shared patterns, and deleting specific knowledge. None of this is
   benchmarked yet.
 
+#### What the memory graph adds: explainability and editing demo
+
+`samples/explain` (`cd samples/explain && odin run . -o:speed -out:out/explain.exe`) shows what
+kNN can't do easily. Every stored digit is made of shared 2×2 patch patterns, and each pattern
+knows every training digit that contains it:
+
+- **Sharing.** 1,493 training digits = 335,925 patch instances, stored as 6,976 distinct patterns
+  (each reused ~48×), with per-pattern class statistics.
+- **Explaining a decision through the shared patches that caused it.** For a misrecognized '9'
+  (read as '3') it prints an evidence map. The map shows where only the winning '3' sample matched,
+  where only the best '9' sample matched, and where both did. It then lists the decisive patterns
+  with the classes of the digits that share them:
+
+  ```
+     test digit          evidence map
+     ..##########....    ::::::::::33:::
+     .+##+++++###+...    ::9:::::::33:::
+     +###+....+##+...    ::99::::::33:::
+     +###+....+##+...    ::999:33::33:::
+  ```
+- **Forgetting with provenance.** `delete_label` on one training digit reports which of its
+  patterns were only its own (freed) and which are shared (kept for the other digits). The digit
+  that led the wrong vote above had 0 patterns of its own. Forgetting it does not fix the mistake,
+  because other '3's still outvote the '9'.
+- **Editing at the pattern level.** Patterns can be deleted one by one with `delete_neuron` and
+  the effect measured instantly. Pruning patterns used by ≤ 5 digits removes 17% of the memory
+  with no accuracy loss. Pruning patterns shared by all classes drops accuracy from 98% to 66%,
+  because background agreement is real evidence.
+
+kNN keeps whole images. It can show the nearest image and delete whole examples, but it has no
+shared parts to point at, count or edit without building an extra index, and that index is
+what the graph is. Whether pattern-level editing pays off still needs a real application.
+
 - ‼️It learns in one pass. Each digit is learned instantly and incrementally, with no retraining.
 - ‼️No gradient descent.
 - ‼️It doesn't use hardware acceleration yet.
