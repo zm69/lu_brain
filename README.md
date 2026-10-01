@@ -1,5 +1,5 @@
 ![Lu_Brain banner](/img/banner.png?raw=true)
-# 🧠 Lu_Brain
+# 🧠 Lu_Brain (experimental)
 
 Ludyna Brain (Lu_Brain) is a human-like memory database, written in [Odin](https://odin-lang.org).
 
