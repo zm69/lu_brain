@@ -293,3 +293,58 @@ package lu_brain__tests
         brain: lu.Brain
         testing.expect_value(t, lu.brain_init(&brain, config), lu.Error(lu.API_Error.Invalid_Config))
     }
+
+///////////////////////////////////////////////////////////////////////////////
+// Per-component rec configs (rec depth > 1)
+
+    @(test)
+    rec_comp_configs__test :: proc(t: ^testing.T) {
+        rec_config := lu.REC_CONFIGS[.Mono1_Image]
+        rec_config.comp_configs_count = 2
+        rec_config.comp_configs[0] = rec_config.comp_config
+        rec_config.comp_configs[1] = rec_config.comp_config
+        rec_config.comp_configs[1].p_neu_size = 4
+
+        testing.expect(t, lu.rec_config__get_comp_config(&rec_config, 1).p_neu_size == 4)
+        testing.expect(t, lu.rec_config__get_comp_config(&rec_config, 0).p_neu_size == 2)
+
+        f: Fixture
+        fixture__init(t, &f, lu.CONFIGS[.Default], 3, 3, 2, rec_config)
+        defer fixture__terminate(t, &f)
+
+        // each component got its own value steps
+        rec_area := lu.s__get_rec_area(&f.brain.s, 0)
+        comp_0 := rec_area.layers[1].(^lu.S_Layer_Comp)
+        comp_1 := rec_area.layers[2].(^lu.S_Layer_Comp)
+        testing.expect_value(t, comp_0.p_view.comp_calc.cells_size, 2)
+        testing.expect_value(t, comp_1.p_view.comp_calc.cells_size, 4)
+
+        // a 2-channel pattern saves and matches
+        blank := [18]lu.Value{}
+        pattern := [18]lu.Value{
+            1, 0, 0,  1, 0, 0,  1, 1, 1,                        // channel 0
+            0, 0.9, 0.9,  0, 0.6, 0,  0.3, 0.3, 0,             // channel 1
+        }
+
+        s_wave: lu.Save_Wave
+        testing.expect(t, lu.save_wave_init(&s_wave, &f.brain) == nil)
+        defer testing.expect(t, lu.save_wave_terminate(&s_wave) == nil)
+        testing.expect(t, lu.push(&s_wave, f.rec, blank[:], 3, 3, 2) == nil)
+        testing.expect(t, lu.push(&s_wave, f.rec, pattern[:], 3, 3, 2) == nil)
+        testing.expect(t, lu.save(&s_wave) == nil)
+        _, err := lu.link_to_label(&s_wave, SEQ_AREA_IX, 0, 0, 0, 5)
+        testing.expect(t, err == nil)
+
+        m_wave: lu.Match_Wave
+        testing.expect(t, lu.match_wave_init(&m_wave, &f.brain) == nil)
+        defer testing.expect(t, lu.match_wave_terminate(&m_wave) == nil)
+        testing.expect(t, lu.push(&m_wave, f.rec, blank[:], 3, 3, 2) == nil)
+        testing.expect(t, lu.push(&m_wave, f.rec, pattern[:], 3, 3, 2) == nil)
+        testing.expect(t, lu.match(&m_wave) == nil)
+        testing.expect_value(t, top_label(lu.match_results(&m_wave)), 5)
+
+        // validation
+        rec_config.comp_configs[1].p_neu_size = 0
+        _, err = lu.add_rec(&f.brain, 3, 3, 2, rec_config)
+        testing.expect_value(t, err, lu.Error(lu.API_Error.Invalid_Config))
+    }

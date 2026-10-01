@@ -79,6 +79,12 @@ package semeion_eval
         learn_mode: Learn_Mode      `usage:"Hybrid: Both (demote the wrong winner, promote the right one), Demote or Promote only."`,
         evidence: bool              `usage:"Hybrid: evidence-map re-ranking variants A, B, C (evidence.odin)."`,
         idm: bool                   `usage:"Hybrid: image distortion model variants (idm.odin)."`,
+        deskew: bool                `usage:"Shear every digit upright (moments) before blurring."`,
+        dirs: int                   `usage:"Hybrid: stroke orientation channels (rec depth +dirs), 0 = off."`,
+        dir_only: bool              `usage:"Hybrid: use only the orientation channels, no intensity."`,
+        dir_steps: int              `usage:"Hybrid: value steps of the orientation channels (0 = same as steps)."`,
+        dir_damping: f64            `usage:"Hybrid: null damping of the orientation channels (zero = no edge)."`,
+        dir_fuzzy: int              `usage:"Hybrid: fuzzy radius of the orientation channels."`,
         idm_mu_a: f64               `usage:"Hybrid: IDM displacement penalty a."`,
         idm_mu_b: f64               `usage:"Hybrid: IDM displacement penalty b."`,
         idm_mu_c: f64               `usage:"Hybrid: IDM displacement penalty c."`,
@@ -147,6 +153,7 @@ package semeion_eval
     Digit :: struct {
         name: int,
         pixels: Pixels,
+        features: []lu.Value,   // hybrid mode input, see features.odin
     }
 
     BLANK_PIXELS: Pixels
@@ -504,9 +511,19 @@ package semeion_eval
         if !ok do os.exit(1)
         defer delete(digits)
 
+        if opts.deskew {
+            for &d in digits do d.pixels = pixels__deskew(&d.pixels)
+        }
+
         if opts.blur > 0 {
             for &d in digits do d.pixels = pixels__blur(&d.pixels, opts.blur)
         }
+
+        FEATURE_DEPTH = features__depth(opts.dirs, opts.dir_only)
+        FEATURE_BLANK = make([]lu.Value, DIGIT__PIXEL_COUNT * FEATURE_DEPTH)
+        defer delete(FEATURE_BLANK)
+        for &d in digits do d.features = features__build(&d.pixels, opts.dirs, opts.dir_only)
+        defer for d in digits do delete(d.features)
 
         fold_of := folds__make(digits[:], opts.folds, opts.seed)
         defer delete(fold_of)
@@ -599,7 +616,7 @@ package semeion_eval
 
     options__summary :: proc(o: ^Options) -> string {
         return fmt.tprintf(
-            "idm_mu=%v/%v/%v idf=%v purity=%v learn=%v/%v/%v holdout=%v stop_save=%v bp=%v vp_bp=%v n_bp=%v scoring=%v results=%v steps=%v fuzzy=%v null_damping=%v blur=%v shift=%v match_shift=%v link_layers=%v link_skip=%v link_level=%v stop=%v link_frame=%v no_seq_link=%v per_sample=%v retry=%v",
-            o.idm_mu_a, o.idm_mu_b, o.idm_mu_c, o.idf, o.purity, o.learn_epochs, o.learn_rate, o.learn_mode, o.holdout, o.stop_save, o.bp, o.vp_bp, o.n_bp, o.scoring, o.results, o.steps, o.fuzzy, o.null_damping, o.blur, o.shift, o.match_shift, o.link_layers, o.link_skip, o.link_level, o.stop, o.link_frame, o.no_seq_link, o.per_sample, o.retry,
+            "deskew=%v dirs=%v/%v/steps %v/damp %v/fuzzy %v idm_mu=%v/%v/%v idf=%v purity=%v learn=%v/%v/%v holdout=%v stop_save=%v bp=%v vp_bp=%v n_bp=%v scoring=%v results=%v steps=%v fuzzy=%v null_damping=%v blur=%v shift=%v match_shift=%v link_layers=%v link_skip=%v link_level=%v stop=%v link_frame=%v no_seq_link=%v per_sample=%v retry=%v",
+            o.deskew, o.dirs, o.dir_only, o.dir_steps, o.dir_damping, o.dir_fuzzy, o.idm_mu_a, o.idm_mu_b, o.idm_mu_c, o.idf, o.purity, o.learn_epochs, o.learn_rate, o.learn_mode, o.holdout, o.stop_save, o.bp, o.vp_bp, o.n_bp, o.scoring, o.results, o.steps, o.fuzzy, o.null_damping, o.blur, o.shift, o.match_shift, o.link_layers, o.link_skip, o.link_level, o.stop, o.link_frame, o.no_seq_link, o.per_sample, o.retry,
         )
     }

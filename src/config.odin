@@ -201,8 +201,15 @@ package lu_brain
         p_null_damping: Value,  // [0, 1], reduces the sig of z = 0 ("no change") cells: 1 - damping
     }
 
+    REC__COMP_CONFIGS_MAX :: 16
+
     Rec_Config :: struct {
-        comp_config: Rec_Comp_Config,
+        comp_config: Rec_Comp_Config,       // used by every component, unless overridden below
+
+        // Optional per-component configs (not C): component z < comp_configs_count uses
+        // comp_configs[z]. 0 = all components use comp_config (C behavior).
+        comp_configs: [REC__COMP_CONFIGS_MAX]Rec_Comp_Config,
+        comp_configs_count: int,
     }
 
     Rec_Config_Type :: enum {
@@ -228,9 +235,15 @@ package lu_brain
     }
 
     rec_config__validate :: proc(self: ^Rec_Config) -> Error {
-        return rec_comp_config__validate(&self.comp_config)
+        rec_comp_config__validate(&self.comp_config) or_return
+
+        if self.comp_configs_count < 0 || self.comp_configs_count > REC__COMP_CONFIGS_MAX do return API_Error.Invalid_Config
+        for &c in self.comp_configs[:self.comp_configs_count] do rec_comp_config__validate(&c) or_return
+
+        return nil
     }
 
     rec_config__get_comp_config :: proc(self: ^Rec_Config, comp_ix: int) -> ^Rec_Comp_Config {
+        if comp_ix < self.comp_configs_count do return &self.comp_configs[comp_ix]
         return &self.comp_config
     }

@@ -65,8 +65,8 @@ package semeion_eval
         for dy in -IDM__R..=IDM__R {
             for dx in -IDM__R..=IDM__R {
                 lu.set_dest_start_pos(h.rec, dx, dy)
-                lu.push(&h.match_wave, h.rec, BLANK_PIXELS[:], DIGIT__W, DIGIT__H, 1) or_return
-                lu.push(&h.match_wave, h.rec, d.pixels[:], DIGIT__W, DIGIT__H, 1) or_return
+                lu.push(&h.match_wave, h.rec, FEATURE_BLANK, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
+                lu.push(&h.match_wave, h.rec, d.features, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
                 lu.match(&h.match_wave) or_return
 
                 fired := lu.fired_cells(&h.match_wave, h.rec, h.level, context.temp_allocator) or_return

@@ -6,8 +6,9 @@
     Dataset: 1593 handwritten digits, 16x16, 1 bit per pixel (data/semeion.names).
 
     Two modes:
-      - tuned (default): patch voting, ~96% (10-fold cross-validation, see samples/semeion_eval)
-          * images are blurred (3x3 box) into grayscale, 3 value steps with fuzzy matching,
+      - tuned (default): patch voting, ~97% (10-fold cross-validation, see samples/semeion_eval)
+          * images are deskewed (sheared upright), blurred (3x3 box) into grayscale,
+            3 value steps with fuzzy matching,
           * every training sample gets its own label, linked to all cells of rec level 1 (2x2 patches),
           * a sample scores the sum of its matching patches (Label_Scoring.Sum),
           * the test digit is matched at every +-1 px offset, the class is voted over the top 5 samples.
@@ -27,6 +28,7 @@ package semeion
 
 // Core
     import "core:fmt"
+    import "core:math"
     import "core:math/rand"
     import "core:os"
     import "core:slice"
@@ -79,6 +81,50 @@ package semeion
             fmt.println()
         }
         fmt.printf("--------------------------------------------------\n")
+    }
+
+    // Shears the digit upright: dst(x, y) = src(x + alpha * (y - cy), y), alpha = mu11 / mu02 of the
+    // intensity moments. Bilinear sampling, zero outside.
+    pixels__deskew :: proc(src: ^Pixels) -> (dst: Pixels) {
+        total, mx, my: lu.Value
+        for y in 0..<DIGIT__H {
+            for x in 0..<DIGIT__W {
+                v := src[y * DIGIT__W + x]
+                total += v
+                mx += v * lu.Value(x)
+                my += v * lu.Value(y)
+            }
+        }
+        if total <= 0 do return src^
+
+        cx, cy := mx / total, my / total
+
+        mu11, mu02: lu.Value
+        for y in 0..<DIGIT__H {
+            for x in 0..<DIGIT__W {
+                v := src[y * DIGIT__W + x]
+                mu11 += v * (lu.Value(x) - cx) * (lu.Value(y) - cy)
+                mu02 += v * (lu.Value(y) - cy) * (lu.Value(y) - cy)
+            }
+        }
+        if mu02 <= 0 do return src^
+
+        alpha := mu11 / mu02
+
+        sample :: proc(src: ^Pixels, x, y: int) -> lu.Value {
+            if x < 0 || y < 0 || x >= DIGIT__W || y >= DIGIT__H do return 0
+            return src[y * DIGIT__W + x]
+        }
+
+        for y in 0..<DIGIT__H {
+            for x in 0..<DIGIT__W {
+                sx := lu.Value(x) + alpha * (lu.Value(y) - cy)
+                x0 := int(math.floor(sx))
+                t := sx - lu.Value(x0)
+                dst[y * DIGIT__W + x] = (1 - t) * sample(src, x0, y) + t * sample(src, x0 + 1, y)
+            }
+        }
+        return
     }
 
     // Box blur; averages only in-bounds pixels.
@@ -298,7 +344,10 @@ package semeion
         fmt.printf("\nLoaded %v samples", len(digits))
 
         when !BASELINE {
-            for &d in digits do d.pixels = pixels__blur(&d.pixels, BLUR_RADIUS)
+            for &d in digits {
+                d.pixels = pixels__deskew(&d.pixels)
+                d.pixels = pixels__blur(&d.pixels, BLUR_RADIUS)
+            }
         }
 
         training, test := data__split(digits[:], allocator)

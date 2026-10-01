@@ -150,8 +150,10 @@ package semeion_eval
         start := time.tick_now()
 
         offsets := (2 * opts.match_shift + 1) * (2 * opts.match_shift + 1)
-        shifted := make([]Pixels, offsets)
+        shifted := make([][]lu.Value, offsets)
         defer delete(shifted)
+        for &sp in shifted do sp = make([]lu.Value, DIGIT__PIXEL_COUNT * FEATURE_DEPTH)
+        defer for sp in shifted do delete(sp)
 
         dists := make([]f64, len(eval.digits))
         defer delete(dists)
@@ -179,7 +181,7 @@ package semeion_eval
                 s := 0
                 for dy in -opts.match_shift..=opts.match_shift {
                     for dx in -opts.match_shift..=opts.match_shift {
-                        shifted[s] = pixels__shift(&d.pixels, dx, dy)
+                        features__shift(d.features, shifted[s], dx, dy)
                         s += 1
                     }
                 }
@@ -188,7 +190,7 @@ package semeion_eval
             knn_order := make([dynamic]int, 0, len(eval.digits), context.temp_allocator)
             for &t, j in eval.digits {
                 if eval.fold_of[j] == fold || eval.fold_of[j] < 0 do continue
-                dists[j] = knn__distance(shifted, &t.pixels)
+                dists[j] = features__distance(shifted, t.features)
                 append(&knn_order, j)
             }
             // the 3 nearest (insertion, no closure needed for the distances)
@@ -316,6 +318,8 @@ package semeion_eval
         config.w_match_sig_breakpoint = opts.bp
         config.w_match_results_size = max(HYBRID__PER_OFFSET_RESULTS, opts.candidates)
         config.w_match_idf_power = opts.idf
+        config.s_vp_parent_breakpoint = opts.vp_bp
+        config.s_parent_breakpoint = opts.n_bp
         // labels on rec level `level`: build and match only up to it
         self.level = max(opts.link_level, 1)
         config.s_save_max_level = self.level
@@ -326,8 +330,22 @@ package semeion_eval
         rec_config.comp_config.p_neu_size = opts.steps
         rec_config.comp_config.p_fuzzy_radius = opts.fuzzy
 
+        // orientation channels get their own config (intensity is component 0 unless dir_only)
+        if opts.dirs > 0 {
+            rec_config.comp_configs_count = FEATURE_DEPTH
+            for z in 0..<FEATURE_DEPTH {
+                c := rec_config.comp_config
+                if z > 0 || opts.dir_only {
+                    if opts.dir_steps > 0 do c.p_neu_size = opts.dir_steps
+                    c.p_null_damping = opts.dir_damping
+                    c.p_fuzzy_radius = opts.dir_fuzzy
+                }
+                rec_config.comp_configs[z] = c
+            }
+        }
+
         lu.brain_init(&self.brain, config) or_return
-        self.rec = lu.add_rec(&self.brain, DIGIT__W, DIGIT__H, 1, rec_config) or_return
+        self.rec = lu.add_rec(&self.brain, DIGIT__W, DIGIT__H, FEATURE_DEPTH, rec_config) or_return
         lu.build(&self.brain) or_return
 
         lu.save_wave_init(&self.save_wave, &self.brain) or_return
@@ -337,8 +355,8 @@ package semeion_eval
         for &d, i in eval.digits {
             if eval.fold_of[i] == fold || eval.fold_of[i] < 0 do continue
 
-            lu.push(&self.save_wave, self.rec, BLANK_PIXELS[:], DIGIT__W, DIGIT__H, 1) or_return
-            lu.push(&self.save_wave, self.rec, d.pixels[:], DIGIT__W, DIGIT__H, 1) or_return
+            lu.push(&self.save_wave, self.rec, FEATURE_BLANK, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
+            lu.push(&self.save_wave, self.rec, d.features, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
             lu.save(&self.save_wave) or_return
             lu.link_level_to_label(&self.save_wave, self.rec, self.level, i) or_return
             lu.set_label_group(&self.brain, i, d.name) or_return
@@ -369,8 +387,8 @@ package semeion_eval
 
                 w := combined[winner]
                 lu.set_dest_start_pos(self.rec, w.dx, w.dy)
-                lu.push(&self.match_wave, self.rec, BLANK_PIXELS[:], DIGIT__W, DIGIT__H, 1) or_return
-                lu.push(&self.match_wave, self.rec, d.pixels[:], DIGIT__W, DIGIT__H, 1) or_return
+                lu.push(&self.match_wave, self.rec, FEATURE_BLANK, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
+                lu.push(&self.match_wave, self.rec, d.features, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
                 lu.match(&self.match_wave) or_return
                 lu.set_dest_start_pos(self.rec, 0, 0)
 
@@ -407,8 +425,8 @@ package semeion_eval
         for dy in -shift..=shift {
             for dx in -shift..=shift {
                 lu.set_dest_start_pos(self.rec, dx, dy)
-                lu.push(&self.match_wave, self.rec, BLANK_PIXELS[:], DIGIT__W, DIGIT__H, 1) or_return
-                lu.push(&self.match_wave, self.rec, d.pixels[:], DIGIT__W, DIGIT__H, 1) or_return
+                lu.push(&self.match_wave, self.rec, FEATURE_BLANK, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
+                lu.push(&self.match_wave, self.rec, d.features, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
                 lu.match(&self.match_wave) or_return
 
                 for res in lu.match_results(&self.match_wave) {

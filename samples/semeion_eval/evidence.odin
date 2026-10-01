@@ -51,8 +51,8 @@ package semeion_eval
 
             // match at this offset, collect the fired level-1 cells
             lu.set_dest_start_pos(h.rec, dx, dy)
-            lu.push(&h.match_wave, h.rec, BLANK_PIXELS[:], DIGIT__W, DIGIT__H, 1) or_return
-            lu.push(&h.match_wave, h.rec, d.pixels[:], DIGIT__W, DIGIT__H, 1) or_return
+            lu.push(&h.match_wave, h.rec, FEATURE_BLANK, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
+            lu.push(&h.match_wave, h.rec, d.features, DIGIT__W, DIGIT__H, FEATURE_DEPTH) or_return
             lu.match(&h.match_wave) or_return
             lu.set_dest_start_pos(h.rec, 0, 0)
 

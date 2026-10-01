@@ -5,6 +5,8 @@ Ludyna Brain (Lu_Brain) is a human-like memory database, written in [Odin](https
 
 This is an Odin port of an experimental C project I created years ago.
 
+So far Lu_Brain distinct value is in what kNN can't do: shared patterns, explanations, and fine-grained forgetting.
+
 ### 🚧 ___This project is an EXPERIMENTAL, just-for-fun work in progress.___ 🚧
 
 - ‼️It learns in one pass. Each example is learned instantly and incrementally, with no retraining.
@@ -19,7 +21,7 @@ fold splits:
 | Mode | Accuracy | Train (1,493 digits, 1 thread) | Net size | Match |
 |---|---|---|---|---|
 | Original C algorithm | ~74.5% | 0.6 s | ~0.9 M cells | ~70 ms / digit |
-| Tuned (`CONFIGS[.Semeion_Tuned]`) | **~96.7%** (range 96.4–97.1%) | 0.2 s | ~8 k cells | ~17 ms / digit |
+| Tuned (`CONFIGS[.Semeion_Tuned]` + deskew) | **~97.1%** (range 96.9–97.3%) | 0.2 s | ~8 k cells | ~19 ms / digit |
 
 #### Honest comparison
 
@@ -27,23 +29,28 @@ The tuned settings were chosen by watching CV scores on the same data, so they w
 a clean holdout: settings chosen by CV on half A only, trained on A (800 digits), tested once on
 the untouched half B (793 digits):
 
-| Method | Holdout accuracy | Match |
-|---|---|---|
-| Original C algorithm | 69.4% | 25 ms / digit |
-| k-nearest-neighbour, raw pixels | 90.0% | 0.2 ms / digit |
-| k-nearest-neighbour, same blur and ±1 px shift | 95.7% | 0.7 ms / digit |
-| Tuned Lu_Brain without rarity weights | 95.3% | 8.8 ms / digit |
-| **Tuned Lu_Brain (current)** | **96.0%** | ~10 ms / digit (estimated) |
+| Method | Holdout accuracy |
+|---|---|
+| Original C algorithm | 69.4% |
+| k-nearest-neighbour, raw pixels | 90.0% |
+| Tuned Lu_Brain without rarity weights, no deskew | 95.3% |
+| k-nearest-neighbour, same blur and ±1 px shift, no deskew | 95.7% |
+| Tuned Lu_Brain, no deskew | 96.0% |
+| **Tuned Lu_Brain (current, with deskew)** | **96.2%** |
+| **k-nearest-neighbour, same blur, ±1 px shift and deskew** | **97.4%** |
+
+Matching takes ~10–20 ms per digit for Lu_Brain and ~1 ms for kNN.
 
 What this shows:
 
 - The tuned mode is an **example-based patch classifier**. Computing the same patch score directly,
   without the memory graph, gives exactly the same predictions (`-mode:Patch` in the harness).
   The graph works as a shared index of patch patterns.
-- **kNN with the same preprocessing is about as accurate and more than 10× faster.** Lu_Brain's
-  accuracy comes mostly from the preprocessing and the patch voting. The one thing that moved it
-  slightly ahead of kNN (within noise) is weighting patterns by how rare they are, which uses the
-  shared-pattern counts the graph keeps anyway.
+- **kNN with the same preprocessing is at least as accurate and more than 10× faster.** Without
+  deskewing the two were tied (rarity weighting put Lu_Brain slightly ahead, within noise).
+  Deskewing helps kNN much more (+1.6 points on the holdout) than Lu_Brain (+0.3), probably because
+  kNN uses the exact intensities, while Lu_Brain quantizes them into 3 value steps. With deskew,
+  kNN is clearly ahead (97.4% vs 96.2% on the holdout, 97.6% vs 97.1% in cross-validation).
 - Lu_Brain's case rests on what the memory structure offers beyond accuracy: inspectable and
   editable memories, shared patterns, and deleting specific knowledge. These are demonstrated in
   `samples/explain` (below), but not benchmarked.
@@ -58,7 +65,8 @@ options (their defaults reproduce the C version exactly):
   `Label_Scoring.Sum` a sample scores the sum of its matching patches over the whole image. The
   original C approach links one label per class to the single top cell; because every layer averages
   2×2 children, that top cell mostly "sees" the center of the image.
-- **Grayscale with fuzzy values.** Images are blurred (3×3 box) into grayscale, quantized into
+- **Deskew, then grayscale with fuzzy values.** Every image is sheared upright using its pixel
+  moments (preprocessing in `samples/semeion`), blurred (3×3 box) into grayscale, quantized into
   3 value steps, and neighbouring steps also match with a partial signal (`p_fuzzy_radius = 1`).
 - **Shift tolerance.** The test digit is matched at every ±1 px offset (`set_dest_start_pos`), and
   the class is voted over the 5 best (sample, offset) scores.
@@ -119,6 +127,8 @@ Measured with 10-fold cross-validation (1–4 seeds) and, for anything promising
 | Evidence map: two-class re-check of the disputed region | worse |
 | Image distortion model: each patch finds its own best alignment within ±1 / ±2 px | worse (95.8–96.1%; ±2 down to 70%) |
 | Image distortion model: global ±1 shift + per-patch ±1 refinement | 2×2 patches: equal or worse; 3×3 patches: +0.1 to +0.25 over their own baseline, still below 2×2 |
+| Deskew (shear upright by pixel moments) | **+0.4** CV (+0.6 with 4 value steps), +0.3 holdout, kept; helps kNN much more (+1.2 CV, +1.6 holdout) |
+| Stroke-direction channels (Sobel orientation, 2–8 channels as extra rec components) | at best equal (97.05%), with tuning: exact component match on save, per-channel zero damping 0.4; without it down to chance |
 
 Lessons:
 
@@ -127,6 +137,10 @@ Lessons:
   are mostly double-counts them. The evidence map's value is explanation, not accuracy.
 - A 2×2 patch is too small for per-patch distortion: wrong digits find matching patches as easily
   as the right ones. Shifting the whole digit already captures the useful tolerance.
+- Extra input channels need care: channels that are zero almost everywhere (like stroke direction)
+  dominate both cell reuse on save and firing on match. Per-component configs
+  (`Rec_Config.comp_configs`) allow separate value steps and zero damping per channel, but the
+  direction channels still did not add accuracy here.
 - Learned link weights did not improve accuracy, but they are a real capability: `reinforce`
   changes only the links of the patches where the wrong and the right answer differ, so every
   correction is local and explainable.
@@ -136,11 +150,11 @@ Lessons:
 ```sh
 cd samples/semeion_eval && odin build . -o:speed -out:out/eval.exe
 out/eval.exe                                                     # original C algorithm
-out/eval.exe -mode:Hybrid -blur:1 -steps:3 -fuzzy:1 -match-shift:1 -idf:0.2   # current tuned brain vs kNN vs fusion
+out/eval.exe -mode:Hybrid -blur:1 -steps:3 -fuzzy:1 -match-shift:1 -idf:0.2 -deskew   # current tuned brain vs kNN vs fusion
 out/eval.exe -mode:Knn -blur:1 -match-shift:1 -results:3                  # kNN baseline, same preprocessing
 out/eval.exe -mode:Patch -match-shift:1 -fuzzy:1 -blur:1 -steps:3 -results:5   # patch score without the graph
 out/eval.exe ... -holdout:Tune   /   ... -holdout:Test             # tune on half A, test once on half B
-out/eval.exe -help                                               # all options (-evidence, -idm, -learn-epochs, ...)
+out/eval.exe -help                                               # all options (-dirs, -evidence, -idm, -learn-epochs, ...)
 ```
 
 ## Why Lu_Brain?
