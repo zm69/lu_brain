@@ -5,7 +5,7 @@ Ludyna Brain (Lu_Brain) is a human-like memory database, written in [Odin](https
 
 This is an Odin port of an experimental C project I created years ago.
 
-So far Lu_Brain distinct value is in what kNN can't do: shared patterns, explanations, and fine-grained forgetting.
+So far (work in progress) Lu_Brain distinct value is in what kNN can't do: shared patterns, explanations, and fine-grained forgetting.
 
 ### 🚧 ___This project is an EXPERIMENTAL, just-for-fun work in progress.___ 🚧
 
